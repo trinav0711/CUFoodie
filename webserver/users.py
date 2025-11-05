@@ -10,5 +10,5 @@ from flask import Flask, request, render_template, g, redirect, Response, abort
 def get_all_users(g):
     cursor = g.conn.cursor()
     cursor.execute("SELECT name FROM users")
-    users = [dict(row) for row in cursor.fetchall()]
-    return users
+    rows=cursor.fetchall()
+    return [dict(row) for row in rows] if rows else []
