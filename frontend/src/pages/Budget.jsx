@@ -5,6 +5,7 @@ export default function Budget() {
   const [data,setData] = useState([]);
 
   async function fetchBudget() {
+    //Flask API call
     const res = await fetch('/budget_api?maxPrice='+maxPrice);
     setData(await res.json());
   }

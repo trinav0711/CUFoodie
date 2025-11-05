@@ -10,7 +10,7 @@ export default function Restaurants() {
 
   async function fetchList() {
     try {
-      // === Flask API call ===
+      // Flask API call
       const q = new URLSearchParams({name: query, location, cuisine, minRating}).toString();
       const res = await fetch('/restaurants_api?' + q); // <-- call Flask API here
       const json = await res.json();                    

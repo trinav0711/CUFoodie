@@ -11,7 +11,7 @@ export default function RestaurantDetail() {
   useEffect(()=>{ fetchData(); }, [id]);
 
   async function fetchData() {
-    try {
+    try {//Flask API calls to get restaurant details, menu, and reviews
       const [rRes, mRes, revRes] = await Promise.all([
         fetch(`/restaurant_api/${id}`),
         fetch(`/menu_api/${id}`),

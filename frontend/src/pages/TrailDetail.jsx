@@ -7,7 +7,7 @@ export default function TrailDetail() {
   const [stops,setStops] = useState([]);
 
   useEffect(()=>{ 
-    fetch(`/trail_api/${id}`).then(r=>r.json()).then(j=>{ setTrail(j.trail); setStops(j.stops) });
+    fetch(`/trail_api/${id}`).then(r=>r.json()).then(j=>{ setTrail(j.trail); setStops(j.stops) });// Fetch trail details from Flask API
   }, [id]);
 
   if(!trail) return <div className="small">Loading…</div>;

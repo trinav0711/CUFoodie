@@ -8,6 +8,7 @@ export default function Dishes() {
 
   async function fetchList() {
     const q = new URLSearchParams({name, tag, maxPrice}).toString();
+    //Flask endpoint invoked here to get dishes
     const res = await fetch('/dishes_api?'+q);
     setData(await res.json());
   }
