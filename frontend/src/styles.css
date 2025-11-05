@@ -1,0 +1,17 @@
+:root { --accent: #2d6cdf; --bg: #f7f8fb; --card: #ffffff; }
+* { box-sizing: border-box; font-family: Inter, system-ui, Arial, sans-serif; }
+body { margin: 0; background: var(--bg); color: #111; }
+.app { max-width: 1000px; margin: 24px auto; padding: 16px; }
+.header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+.brand { font-weight: 700; font-size: 20px; color: var(--accent); }
+.nav a { margin-left: 12px; color: #333; text-decoration: none; }
+.card-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 12px; }
+.card { background: var(--card); padding: 16px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+.controls { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.input, select { padding: 8px; border-radius: 8px; border: 1px solid #ddd; }
+.table { width: 100%; border-collapse: collapse; }
+.table th, .table td { padding: 8px; text-align: left; border-bottom: 1px solid #eee; }
+.btn { background: var(--accent); color: white; padding: 8px 10px; border-radius: 8px; border: none; }
+.small { font-size: 13px; color: #666; }
+.link { color: var(--accent); text-decoration: none; }
+.center { display: flex; align-items: center; justify-content: center; }
