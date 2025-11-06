@@ -1,224 +1,252 @@
+"""
+Merged server.py using existing helper modules (dish.py, menu.py, restaurant.py, reviews.py, trails.py, users.py).
+- No ORMs. Uses psycopg2 connection pool and passes a small `g` object with `.conn` to helper functions.
+- Does NOT seed/populate the DB.
+- Serves frontend from ../frontend/dist or ../frontend/build.
+- Runs on port 8111 by default.
+"""
 
-"""
-Columbia's COMS W4111.001 Introduction to Databases
-Example Webserver
-To run locally:
-    python server.py
-Go to http://localhost:8111 in your browser.
-A debugger such as "pdb" may be helpful for debugging.
-Read about it online.
-"""
 import os
-# accessible as a variable in index.html:
-from sqlalchemy import *
-from sqlalchemy.pool import NullPool
-from flask import Flask, request, render_template, g, redirect, Response, abort
+from pathlib import Path
+from flask import Flask, jsonify, request, send_from_directory, abort
+from flask_cors import CORS
+import logging
+import psycopg2
+from psycopg2 import pool
+import traceback
 
-tmpl_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates')
-app = Flask(__name__, template_folder=tmpl_dir)
+# Import existing helper modules (assumed to be in same folder)
+import dish, menu as menu_mod, restaurant as restaurant_mod, reviews as reviews_mod, trails as trails_mod, users as users_mod
 
+# --- Configuration ---
+BASE_DIR = Path(__file__).resolve().parent
+WEBROOT = BASE_DIR.parent
+DEFAULT_DB_URI = os.environ.get("DATABASEURI") or os.environ.get("DATABASE_URL") or "postgresql://tb3201:sriya@34.26.242.173:8111/proj1part2"
 
-#
-# The following is a dummy URI that does not connect to a valid database. You will need to modify it to connect to your Part 2 database in order to use the data.
-#
-# XXX: The URI should be in the format of: 
-#
-#     postgresql://USER:PASSWORD@34.139.8.30/proj1part2
-#
-# For example, if you had username ab1234 and password 123123, then the following line would be:
-#
-#     DATABASEURI = "postgresql://ab1234:123123@34.139.8.30/proj1part2"
-#
-# Modify these with your own credentials you received from TA!
-DATABASE_USERNAME = ""
-DATABASE_PASSWRD = ""
-DATABASE_HOST = "34.139.8.30"
-DATABASEURI = f"postgresql://{DATABASE_USERNAME}:{DATABASE_PASSWRD}@{DATABASE_HOST}/proj1part2"
+DB_MIN_CONN = int(os.environ.get("DB_MIN_CONN", 1))
+DB_MAX_CONN = int(os.environ.get("DB_MAX_CONN", 10))
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("server")
 
-#
-# This line creates a database engine that knows how to connect to the URI above.
-#
-engine = create_engine(DATABASEURI)
+# --- Connection pool ---
+try:
+    # psycopg2 expects a DSN; accept either URL or components
+    dsn = DEFAULT_DB_URI
+    connection_pool = psycopg2.pool.SimpleConnectionPool(DB_MIN_CONN, DB_MAX_CONN, dsn)
+    if connection_pool:
+        logger.info("Initialized psycopg2 connection pool (min=%d max=%d)", DB_MIN_CONN, DB_MAX_CONN)
+except Exception:
+    logger.exception("Failed to initialize connection pool with DSN: %s", DEFAULT_DB_URI)
+    connection_pool = None
 
-#
-# Example of running queries in your database
-# Note that this will probably not work if you already have a table named 'test' in your database, containing meaningful data. This is only an example showing you how to run queries in your database using SQLAlchemy.
-#
-with engine.connect() as conn:
-	create_table_command = """
-	CREATE TABLE IF NOT EXISTS test (
-		id serial,
-		name text
-	)
-	"""
-	res = conn.execute(text(create_table_command))
-	insert_table_command = """INSERT INTO test(name) VALUES ('grace hopper'), ('alan turing'), ('ada lovelace')"""
-	res = conn.execute(text(insert_table_command))
-	# you need to commit for create, insert, update queries to reflect
-	conn.commit()
+# Helper to get a temporary g-like object that helper modules expect (they use g.conn.cursor())
+class G:
+    def __init__(self, conn):
+        self.conn = conn
 
+def with_conn(fn):
+    """Decorator to provide a connection wrapper `g` to the wrapped function."""
+    def wrapper(*args, **kwargs):
+        if connection_pool is None:
+            return jsonify(error="DB pool not initialized"), 500
+        conn = None
+        try:
+            conn = connection_pool.getconn()
+            g = G(conn)
+            result = fn(g, *args, **kwargs)
+            # If the helper returned rows (list/dict), ensure to commit if they changed DB? Helpers mostly read.
+            return result
+        except Exception as e:
+            logger.exception("Error in DB operation: %s", e)
+            # If the helper returned a Flask response, we don't want to double-wrap; assume exceptions mean 500
+            return jsonify(error=str(e), traceback=traceback.format_exc()), 500
+        finally:
+            if conn:
+                try:
+                    connection_pool.putconn(conn)
+                except Exception:
+                    logger.exception("Failed to putconn")
+    wrapper.__name__ = fn.__name__
+    return wrapper
 
-@app.before_request
-def before_request():
-	"""
-	This function is run at the beginning of every web request 
-	(every time you enter an address in the web browser).
-	We use it to setup a database connection that can be used throughout the request.
+# --- Flask app ---
+app = Flask(__name__, static_folder=None)
+CORS(app)
 
-	The variable g is globally accessible.
-	"""
-	try:
-		g.conn = engine.connect()
-	except:
-		print("uh oh, problem connecting to database")
-		import traceback; traceback.print_exc()
-		g.conn = None
+# Simple health check
+@app.route("/api/health", methods=["GET"])
+def health():
+    ok = connection_pool is not None
+    return jsonify(status="ok" if ok else "error", db_pool=bool(connection_pool))
 
-@app.teardown_request
-def teardown_request(exception):
-	"""
-	At the end of the web request, this makes sure to close the database connection.
-	If you don't, the database could run out of memory!
-	"""
-	try:
-		g.conn.close()
-	except Exception as e:
-		pass
+# Users
+@app.route("/api/users", methods=["GET"])
+def api_get_users():
+    @with_conn
+    def _inner(g):
+        rows = users_mod.get_all_users(g)
+        return jsonify(rows)
+    return _inner()
 
+# Restaurants
+@app.route("/api/restaurants", methods=["GET"])
+def api_restaurants():
+    @with_conn
+    def _inner(g):
+        rows = restaurant_mod.get_all_restaurants(g)
+        return jsonify(rows)
+    return _inner()
 
-#
-# @app.route is a decorator around index() that means:
-#   run index() whenever the user tries to access the "/" path using a GET request
-#
-# If you wanted the user to go to, for example, localhost:8111/foobar/ with POST or GET then you could use:
-#
-#       @app.route("/foobar/", methods=["POST", "GET"])
-#
-# PROTIP: (the trailing / in the path is important)
-# 
-# see for routing: https://flask.palletsprojects.com/en/1.1.x/quickstart/#routing
-# see for decorators: http://simeonfranklin.com/blog/2012/jul/1/python-decorators-in-12-steps/
-#
-@app.route('/')
-def index():
-	"""
-	request is a special object that Flask provides to access web request information:
+@app.route("/api/restaurants/<name>", methods=["GET"])
+def api_restaurant_by_name(name):
+    @with_conn
+    def _inner(g, name):
+        row = restaurant_mod.get_restaurant_by_name(g, name)
+        if not row:
+            return jsonify(error="not found"), 404
+        return jsonify(row)
+    return _inner(name)
 
-	request.method:   "GET" or "POST"
-	request.form:     if the browser submitted a form, this contains the data in the form
-	request.args:     dictionary of URL arguments, e.g., {a:1, b:2} for http://localhost?a=1&b=2
+# Dishes / Menu
+@app.route("/api/dishes", methods=["GET"])
+def api_dishes():
+    # support query param 'name' to search dishes by substring (uses helper get_dish_by_name which expects exact maybe)
+    name = request.args.get("name")
+    price = request.args.get("price", type=float)
+    tag = request.args.get("tag")
+    @with_conn
+    def _inner(g):
+        if name:
+            rows = dish.get_dish_by_name(g, name)
+            return jsonify(rows)
+        if price is not None:
+            rows = dish.get_dish_by_price(g, price)
+            return jsonify(rows)
+        if tag:
+            rows = dish.get_dish_by_tag(g, tag)
+            return jsonify(rows)
+        # fallback: return all restaurants' menus via restaurant helper
+        rows = restaurant_mod.get_all_restaurants(g)
+        return jsonify(rows)
+    return _inner()
 
-	See its API: https://flask.palletsprojects.com/en/1.1.x/api/#incoming-request-data
-	"""
+@app.route("/api/menu/price", methods=["GET"])
+def api_menu_by_price():
+    max_price = request.args.get("max_price", type=float)
+    if max_price is None:
+        return jsonify(error="max_price query param required"), 400
+    @with_conn
+    def _inner(g, max_price):
+        rows = menu_mod.get_details_by_price(g, max_price)
+        return jsonify(rows)
+    return _inner(max_price)
 
-	# DEBUG: this is debugging code to see what request looks like
-	print(request.args)
+# Budget endpoint (compatibility)
+@app.route("/api/budget", methods=["GET"])
+def api_budget():
+    max_price = request.args.get("max_price", type=float)
+    if max_price is None:
+        return jsonify(error="max_price query param required"), 400
+    @with_conn
+    def _inner(g, max_price):
+        rows = menu_mod.get_details_by_price(g, max_price)
+        return jsonify(rows)
+    return _inner(max_price)
 
+# Reviews
+@app.route("/api/reviews", methods=["GET"])
+def api_get_reviews():
+    @with_conn
+    def _inner(g):
+        rows = reviews_mod.all_reviews(g)
+        return jsonify(rows)
+    return _inner()
 
-	#
-	# example of a database query
-	#
-	select_query = "SELECT name from test"
-	cursor = g.conn.execute(text(select_query))
-	names = []
-	for result in cursor:
-		names.append(result[0])
-	cursor.close()
+@app.route("/api/reviews/user/<username>", methods=["GET"])
+def api_reviews_by_user(username):
+    @with_conn
+    def _inner(g, username):
+        rows = reviews_mod.reviews_by_user(g, username)
+        return jsonify(rows)
+    return _inner(username)
 
-	#
-	# Flask uses Jinja templates, which is an extension to HTML where you can
-	# pass data to a template and dynamically generate HTML based on the data
-	# (you can think of it as simple PHP)
-	# documentation: https://realpython.com/primer-on-jinja-templating/
-	#
-	# You can see an example template in templates/index.html
-	#
-	# context are the variables that are passed to the template.
-	# for example, "data" key in the context variable defined below will be 
-	# accessible as a variable in index.html:
-	#
-	#     # will print: [u'grace hopper', u'alan turing', u'ada lovelace']
-	#     <div>{{data}}</div>
-	#     
-	#     # creates a <div> tag for each element in data
-	#     # will print: 
-	#     #
-	#     #   <div>grace hopper</div>
-	#     #   <div>alan turing</div>
-	#     #   <div>ada lovelace</div>
-	#     #
-	#     {% for n in data %}
-	#     <div>{{n}}</div>
-	#     {% endfor %}
-	#
-	context = dict(data = names)
+@app.route("/api/reviews/count/<username>", methods=["GET"])
+def api_count_reviews(username):
+    @with_conn
+    def _inner(g, username):
+        c = reviews_mod.count_review_by_user(g, username)
+        return jsonify(count=c)
+    return _inner(username)
 
+# Trails
+@app.route("/api/trails", methods=["GET"])
+def api_get_trails():
+    @with_conn
+    def _inner(g):
+        rows = trails_mod.all_trails(g)
+        return jsonify(rows)
+    return _inner()
 
-	#
-	# render_template looks in the templates/ folder for files.
-	# for example, the below file reads template/index.html
-	#
-	return render_template("index.html", **context)
+@app.route("/api/trails/user/<username>", methods=["GET"])
+def api_trails_by_user(username):
+    @with_conn
+    def _inner(g, username):
+        rows = trails_mod.trails_by_user(g, username)
+        return jsonify(rows)
+    return _inner(username)
 
-#
-# This is an example of a different path.  You can see it at:
-# 
-#     localhost:8111/another
-#
-# Notice that the function name is another() rather than index()
-# The functions for each app.route need to have different names
-#
-@app.route('/another')
-def another():
-	return render_template("another.html")
+@app.route("/api/trails/name/<name>", methods=["GET"])
+def api_trails_by_name(name):
+    @with_conn
+    def _inner(g, name):
+        rows = trails_mod.trails_by_name(g, name)
+        return jsonify(rows)
+    return _inner(name)
 
+# Profile endpoint (from api.py compatibility)
+@app.route("/api/profile", methods=["GET"])
+def api_profile():
+    username = request.args.get("username")
+    if not username:
+        return jsonify(error="username required"), 400
+    @with_conn
+    def _inner(g, username):
+        # reuse existing helpers to assemble profile: user reviews + trails
+        user_reviews = reviews_mod.reviews_by_user(g, username)
+        user_trails = trails_mod.trails_by_user(g, username)
+        return jsonify({"username": username, "reviews": user_reviews, "trails": user_trails})
+    return _inner(username)
 
-# Example of adding new data to the database
-@app.route('/add', methods=['POST'])
-def add():
-	# accessing form inputs from user
-	name = request.form['name']
-	
-	# passing params in for each variable into query
-	params = {}
-	params["new_name"] = name
-	g.conn.execute(text('INSERT INTO test(name) VALUES (:new_name)'), params)
-	g.conn.commit()
-	return redirect('/')
+# Static frontend serving
+def find_frontend_dist():
+    candidates = [WEBROOT / "frontend" / "dist", WEBROOT / "frontend" / "build", WEBROOT / "frontend" / "dist" / "client"]
+    for c in candidates:
+        if c.exists():
+            return c
+    return None
 
+frontend_dist = find_frontend_dist()
 
-@app.route('/login')
-def login():
-	abort(401)
-	# Your IDE may highlight this as a problem - because no such function exists (intentionally).
-	# This code is never executed because of abort().
-	this_is_never_executed()
+@app.route("/", defaults={"path": ""})
+@app.route("/<path:path>")
+def serve_frontend(path):
+    if path.startswith("api"):
+        return jsonify(error="Not found"), 404
+    if frontend_dist:
+        full = frontend_dist / path
+        if path != "" and full.exists():
+            return send_from_directory(str(frontend_dist), path)
+        index = frontend_dist / "index.html"
+        if index.exists():
+            return send_from_directory(str(frontend_dist), "index.html")
+    dev_index = WEBROOT / "frontend" / "index.html"
+    if dev_index.exists():
+        return send_from_directory(str(WEBROOT / "frontend"), "index.html")
+    return jsonify(ok=True, msg="API running. Build the React frontend into frontend/dist to serve static files.")
 
-
+# Main
 if __name__ == "__main__":
-	import click
-
-	@click.command()
-	@click.option('--debug', is_flag=True)
-	@click.option('--threaded', is_flag=True)
-	@click.argument('HOST', default='0.0.0.0')
-	@click.argument('PORT', default=8111, type=int)
-	def run(debug, threaded, host, port):
-		"""
-		This function handles command line parameters.
-		Run the server using:
-
-			python server.py
-
-		Show the help text using:
-
-			python server.py --help
-
-		"""
-
-		HOST, PORT = host, port
-		print("running on %s:%d" % (HOST, PORT))
-		app.run(host=HOST, port=PORT, debug=debug, threaded=threaded)
-
-run()
+    port = int(os.environ.get("PORT", 8111))
+    logger.info("Starting server on port %d", port)
+    app.run(host="0.0.0.0", port=port)

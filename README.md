@@ -1,6 +1,9 @@
 # CUFoodie
 SQL front-end code to access DB located in Postgres server in private Google Cloud VM
 
+Run this to download modules:
+pip install -r requirements.txt
+
 ## PostgreSQL username and password:
 Located in the VM instance under tb3201. Steps to login:
 1. #### tb3201@cs4111-instance:~$ psql -U tb3201 -h 34.139.8.30 -d proj1part2
