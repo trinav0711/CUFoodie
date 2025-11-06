@@ -7,7 +7,7 @@ Located in the VM instance under tb3201. Steps to login:
 2. #### Password: sriya
 
 ## Web Application URL:
-<some URL>:25000
+34.26.242.173:8111
 
 ## Part 1 features implemented
 We implemented everything that we proposed in the part 1 of our project proposal as follows:
