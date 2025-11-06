@@ -14,6 +14,7 @@ import logging
 import psycopg2
 from psycopg2 import pool
 import traceback
+import logging
 
 # Import existing helper modules (assumed to be in same folder)
 import dish, menu as menu_mod, restaurant as restaurant_mod, reviews as reviews_mod, trails as trails_mod, users as users_mod
