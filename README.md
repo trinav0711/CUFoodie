@@ -7,6 +7,7 @@ Located in the VM instance under tb3201. Steps to login:
 2. #### Password: sriya
 
 ## Web Application URL:
+<some URL>:25000
 
 ## Part 1 features implemented
 We implemented everything that we proposed in the part 1 of our project proposal as follows:
@@ -83,3 +84,13 @@ In the Profile page, users can view all reviews they have submitted. The page di
 If the user of the DB wants to check dishes that are vegan, let’s say.
 
 The Dishes page allows users to enter a dietary tag, such as vegan or gluten-free. The app then lists all dishes matching that dietary restriction, along with the restaurants serving them.
+
+## Interesting web pages of the application
+
+### Restaurant browser page
+This page contains filters and lets the user choose restaurants at their will, be it based on name, cuisine, locality or even an average rating.
+
+The page will change dynamically as the user changes the filters. Initiallu, it will show all the restaurants and then keeps getting smaller as the filters increase. On the backend it involves complicated joins with clauses to select only a handful of restaurants satisfying the predicate(s). The most interesting of these is the one with the average rating. This lets users decide on good restaurants. The join involves tables of restaurant, dishes and reviews. After applying the filters, it will give all the details including restauarant's name, locality, cuisine and average review.
+
+### Food Trails Explorer
+The page about food trails contains interesting details about different kind of food trips such as midnight snacks, etc. The output is a list containing the restaurant details, dish and its price. This operation also uses multiple joins on the server-side combining details from menu, dish, restaurant and trail tables based on the trail name selected. The part about trails is a unique aspect of this project as it gives users the ability to find curated lists based on inputs of previous users.
