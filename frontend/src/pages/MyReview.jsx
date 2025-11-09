@@ -9,7 +9,7 @@ export default function MyReviews() {
     if(!user) return;
 
     // Flask API: return only reviews made by the logged-in user
-    fetch('/user_reviews_api?user=' + encodeURIComponent(user))
+    fetch('/api/reviews/user?user=' + encodeURIComponent(user))
       .then(r=>r.json())
       .then(j=>setData(j));
   }, [user]);
