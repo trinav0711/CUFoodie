@@ -22,10 +22,10 @@ import dish, menu as menu_mod, restaurant as restaurant_mod, reviews as reviews_
 # --- Configuration ---
 BASE_DIR = Path(__file__).resolve().parent
 WEBROOT = BASE_DIR.parent
-DEFAULT_DB_URI = os.environ.get("DATABASEURI") or os.environ.get("DATABASE_URL") or "postgresql://tb3201:sriya@34.26.242.173:8111/proj1part2"
+DEFAULT_DB_URI = os.environ.get("DATABASEURI") or os.environ.get("DATABASE_URL") or "postgresql://tb3201:sriya@127.0.0.1:5432/proj1part2"
 
 DB_MIN_CONN = int(os.environ.get("DB_MIN_CONN", 1))
-DB_MAX_CONN = int(os.environ.get("DB_MAX_CONN", 10))
+DB_MAX_CONN = int(os.environ.get("DB_MAX_CONN", 100))
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("server")
