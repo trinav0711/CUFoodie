@@ -5,13 +5,13 @@ export default function MyReviews() {
   const { user } = useAuth();
   const [data,setData] = useState([]);
 
-  useEffect(()=>{
-    if(!user) return;
+  useEffect(() => {
+    if (!user) return;
 
     // Flask API: return only reviews made by the logged-in user
-    fetch('/api/reviews/user?user=' + encodeURIComponent(user))
-      .then(r=>r.json())
-      .then(j=>setData(j));
+    fetch('/api/reviews/user/' + encodeURIComponent(user))
+      .then(r => r.json())
+      .then(j => setData(j));
   }, [user]);
 
   return (

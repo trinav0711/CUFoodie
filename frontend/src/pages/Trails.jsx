@@ -6,10 +6,14 @@ export default function Trails() {
   const [data,setData] = useState([]);
 
   async function fetchData() {
-    const q = new URLSearchParams({type}).toString();
-    const res = await fetch('/trails_api?'+q);//Flask API call to get trails
-    setData(await res.json());
+  let url = "/api/trails";
+  if (type.trim()) {
+    url = `/api/trails/name/${encodeURIComponent(type)}`;
   }
+  const res = await fetch(url);
+  setData(await res.json());
+}
+
 
   useEffect(()=>{ fetchData(); }, []);
 

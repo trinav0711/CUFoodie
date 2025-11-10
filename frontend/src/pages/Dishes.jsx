@@ -7,11 +7,10 @@ export default function Dishes() {
   const [data,setData] = useState([]);
 
   async function fetchList() {
-    const q = new URLSearchParams({name, tag, maxPrice}).toString();
-    //Flask endpoint invoked here to get dishes
-    const res = await fetch('/dishes_api?'+q);
-    setData(await res.json());
-  }
+  const q = new URLSearchParams({name, tag, price: maxPrice}).toString();
+  const res = await fetch('/api/dishes?' + q);
+  setData(await res.json());
+}
 
   useEffect(()=>{ fetchList(); }, []);
 

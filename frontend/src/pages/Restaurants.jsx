@@ -12,7 +12,7 @@ export default function Restaurants() {
     try {
       // Flask API call
       const q = new URLSearchParams({name: query, location, cuisine, minRating}).toString();
-      const res = await fetch('/restaurants_api?' + q); // <-- call Flask API here
+      const res = await fetch('/api/restaurants?' + q);
       const json = await res.json();                    
       setData(json);                                    
     } catch(e) {

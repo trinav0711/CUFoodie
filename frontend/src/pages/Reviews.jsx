@@ -8,7 +8,7 @@ export default function Reviews() {
 
   useEffect(()=>{
     // Flask API: recent public reviews
-    fetch('/reviews_api') // <-- Flask endpoint
+    fetch('/api/reviews') // <-- Flask endpoint
       .then(r=>r.json())
       .then(j=>setRecent(j));
 
