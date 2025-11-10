@@ -10,7 +10,7 @@ Read about it online.
 """
 import os
 # accessible as a variable in index.html:
-from sqlalchemy import *
+from sqlalchemy import create_engine, text
 from sqlalchemy.pool import NullPool
 from flask import Flask, request, render_template, g, redirect, Response, abort
 

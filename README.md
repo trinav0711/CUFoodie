@@ -83,3 +83,6 @@ In the Profile page, users can view all reviews they have submitted. The page di
 If the user of the DB wants to check dishes that are vegan, let’s say.
 
 The Dishes page allows users to enter a dietary tag, such as vegan or gluten-free. The app then lists all dishes matching that dietary restriction, along with the restaurants serving them.
+
+
+# Briefly describe two of the web pages that require (what you consider) the most interesting database operations in terms of what the pages are used for, how the page is related to the database operations (e.g., inputs on the page are used in such and such way to produce database operations that do such and such), and why you think they are interesting.
