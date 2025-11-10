@@ -1,12 +1,16 @@
 # CUFoodie
 SQL front-end code to access DB located in Postgres server in private Google Cloud VM
 
+Run this to download modules:
+pip install -r requirements.txt
+
 ## PostgreSQL username and password:
 Located in the VM instance under tb3201. Steps to login:
-1. #### tb3201@cs4111-instance:~$ psql -U tb3201 -h 34.139.8.30 -d proj1part2
+1. #### psql -U tb3201 -h 34.139.8.30 -d proj1part2
 2. #### Password: sriya
 
 ## Web Application URL:
+34.26.242.173:8111
 
 ## Part 1 features implemented
 We implemented everything that we proposed in the part 1 of our project proposal as follows:
@@ -84,5 +88,12 @@ If the user of the DB wants to check dishes that are vegan, let’s say.
 
 The Dishes page allows users to enter a dietary tag, such as vegan or gluten-free. The app then lists all dishes matching that dietary restriction, along with the restaurants serving them.
 
+## Interesting web pages of the application
 
-# Briefly describe two of the web pages that require (what you consider) the most interesting database operations in terms of what the pages are used for, how the page is related to the database operations (e.g., inputs on the page are used in such and such way to produce database operations that do such and such), and why you think they are interesting.
+### Restaurant browser page
+This page contains filters and lets the user choose restaurants at their will, be it based on name, cuisine, locality or even an average rating.
+
+The page will change dynamically as the user changes the filters. Initially, it will show all the restaurants, and then it gets smaller as the filters are applied. On the backend, it involves complicated joins with clauses to select only a handful of restaurants satisfying the predicate(s). The most interesting of these is the one with the average rating. This lets users decide on good restaurants. The join involves tables of restaurants, dishes and reviews. After applying the filters, it will give all the details, including the restaurant's name, locality, cuisine and average review.
+
+### Food Trails Explorer
+The page about food trails contains interesting details about different kinds of food trips, such as midnight snacks, etc. The output is a list containing the restaurant details, dish and its price. This operation also uses multiple joins on the server-side, combining details from the menu, dish, restaurant, and trail tables based on the trail name selected. The part about trails is a unique aspect of this project, as it gives users the ability to find curated lists based on the inputs of previous users.

@@ -14,7 +14,7 @@ export default function Reviews() {
 
     if(user){
       // Flask API: reviews only by this user
-      fetch('/user_reviews_api?user=' + encodeURIComponent(user))
+      fetch('/api/reviews/user?user=' + encodeURIComponent(user))
         .then(r=>r.json())
         .then(j=>setMine(j));
     }

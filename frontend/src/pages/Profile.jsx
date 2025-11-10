@@ -8,9 +8,10 @@ export default function Profile() {
 
   useEffect(()=>{
     if(!user) return;
-    fetch('/my_profile_api?user='+encodeURIComponent(user)) // call Flask API to get user profile data
-      .then(r=>r.json())
-      .then(j=>{ setTrails(j.trails||[]); setReviews(j.reviews||[]) })
+    //fetch('/my_profile_api?user='+encodeURIComponent(user)) // call Flask API to get user profile data
+    fetch(`/api/profile?username=${encodeURIComponent(user)}`)
+      	.then(r=>r.json())
+      	.then(j=>{ setTrails(j.trails||[]); setReviews(j.reviews||[]) })
   }, [user]);
 
   return (
