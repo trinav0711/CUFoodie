@@ -6,11 +6,11 @@ pip install -r requirements.txt
 
 ## PostgreSQL username and password:
 Located in the VM instance under tb3201. Steps to login:
-1. #### psql -U tb3201 -h 34.139.8.30 -d proj1part2
+1. #### psql -U tb3201 -h localhost -d proj1part2
 2. #### Password: sriya
 
 ## Web Application URL:
-34.26.242.173:8111
+http://34.148.46.88:8111
 
 ## Part 1 features implemented
 We implemented everything that we proposed in the part 1 of our project proposal as follows:
