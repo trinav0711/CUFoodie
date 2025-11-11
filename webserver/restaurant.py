@@ -56,19 +56,26 @@ def get_average_rating(g, name):
     return [{"name": row[0], "average_rating": float(row[1]) if row[1] is not None else None}]
 
 # Get restaurants by location
+# Get restaurants by location (partial match)
 def get_by_location(g, loc):
     cursor = g.conn.cursor()
-    query = "SELECT name, location, cuisine_type FROM restaurant WHERE location = %s"
-    cursor.execute(query, (loc,))
+    query = "SELECT name, location, cuisine_type FROM restaurant WHERE location ILIKE %s"
+    cursor.execute(query, (f"%{loc}%",))
     rows = rows_to_dicts(cursor)
     cursor.close()
     return rows
 
 # Get restaurants by cuisine type
+# Get restaurants by cuisine type (partial/case-insensitive)
 def get_by_cuisine(g, cuisine):
     cursor = g.conn.cursor()
-    query = "SELECT name, location, cuisine_type FROM restaurant WHERE cuisine_type = %s"
-    cursor.execute(query, (cuisine,))
+    query = """
+        SELECT name, location, cuisine_type
+        FROM restaurant
+        WHERE cuisine_type ILIKE %s
+    """
+    # Use % for SQL LIKE match
+    cursor.execute(query, (f"%{cuisine}%",))
     rows = rows_to_dicts(cursor)
     cursor.close()
     return rows
