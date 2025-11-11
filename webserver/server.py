@@ -91,13 +91,44 @@ def api_restaurants():
 
     @with_conn
     def _inner(g):
+        # 1️⃣ Search by exact restaurant name
         if name:
             rows = restaurant_mod.get_restaurant_by_name(g, name)
+
+        # 2️⃣ Filtering
         elif location or cuisine or min_rating:
-            rows = restaurant_mod.get_all_restaurants(g)  # fallback until filtering supported
+            rows = restaurant_mod.get_all_restaurants(g)
+
+            # Filter by location (DB-level or Python)
+            if location:
+                rows = restaurant_mod.get_by_location(g, location)
+
+            # Filter by cuisine (partial match)
+            if cuisine:
+                rows = [r for r in rows if cuisine.lower() in r["cuisine_type"].lower()]
+
+            # Filter by min_rating
+            if min_rating:
+                rating_val = float(min_rating)
+                filtered = []
+                for r in rows:
+                    avg = restaurant_mod.get_average_rating(g, r["name"])
+                    avg_rating = avg[0]["average_rating"] if avg else 0
+                    if avg_rating >= rating_val:
+                        filtered.append(r)
+                rows = filtered
+
+        # 3️⃣ No filters → all restaurants
         else:
             rows = restaurant_mod.get_all_restaurants(g)
+
+        # Add average rating for each restaurant
+        for r in rows:
+            avg = restaurant_mod.get_average_rating(g, r["name"])
+            r["avg_rating"] = avg[0]["average_rating"] if avg else None
+
         return jsonify(rows)
+
     return _inner()
 
 @app.route("/api/restaurants/<name>", methods=["GET"])
@@ -111,41 +142,64 @@ def api_restaurant_by_name(name):
     return _inner(name)
 
 # --- Dishes ---
-@app.route("/api/dishes")
+from flask import request, jsonify
+import dish as dish_mod
+
+@app.route("/api/dishes", methods=["GET"])
 def api_dishes():
-    name = request.args.get("name", "")
-    tag = request.args.get("tag", "")
-    max_price = request.args.get("price", "")
+    @with_conn
+    def _inner(g):
+        name = request.args.get("name", "").strip()
+        tag = request.args.get("tag", "").strip()
+        price = request.args.get("price", "").strip()
 
-    # Fetch dishes with optional filters
-    try:
-        if name or tag or max_price:
-            rows = menu_mod.filter_menu_items(g, name=name, tag=tag, max_price=max_price)
-        else:
-            # fallback: get everything from menu
-            if hasattr(menu_mod, "get_all_menu"):
-                rows = menu_mod.get_all_menu(g)
-            else:
-                rows = []
-    except Exception as e:
-        logger.exception("Error fetching dishes")
-        return jsonify({"error": str(e)}), 500
+        # Build base query
+        query = dish_mod.get_join_restaurant_dish_menu()
+        conditions = []
+        params = []
 
-    # Format output for frontend
-    dishes = [
-        {
-            "dish_id": row.get("menu_id") or row.get("dish_id"),
-            "name": row.get("name"),
-            "restaurant_id": row.get("restaurant_id"),
-            "restaurant_name": row.get("restaurant_name"),
-            "price": row.get("price"),
-            "dietary_tags": row.get("dietary_tags"),
-        }
-        for row in rows
-    ]
+        if name:
+            conditions.append("dish.name ILIKE %s")
+            params.append(f"%{name}%")
+        if tag:
+            conditions.append("dietary_tags ILIKE %s")
+            params.append(f"%{tag}%")
+        if price:
+            try:
+                price_val = float(price)
+                conditions.append("price <= %s")
+                params.append(price_val)
+            except ValueError:
+                return jsonify({"error": "Invalid price"}), 400
 
-    return jsonify(dishes)
+        # Add WHERE clause if any condition exists
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
 
+        # Execute query
+        cursor = g.conn.cursor()
+        cursor.execute(query, tuple(params))
+        cols = [desc[0] for desc in cursor.description]
+        rows = [dict(zip(cols, row)) for row in cursor.fetchall()]
+        cursor.close()
+
+        # Format for React frontend
+        formatted = [
+            {
+                "dish_id": r.get("dish_id"),
+                "menu_id": r.get("menu_id"),
+                "restaurant_id": r.get("restaurant_id"),
+                "name": r.get("dish_name"),
+                "restaurant_name": r.get("restaurant_name"),
+                "price": float(r.get("price")) if r.get("price") is not None else None,
+                "dietary_tags": r.get("dietary_tags") or "",
+            }
+            for r in rows
+        ]
+
+        return jsonify(formatted)
+
+    return _inner()
 
 # --- Menu / Budget ---
 @app.route("/api/menu/price", methods=["GET"])
@@ -223,6 +277,31 @@ def api_trails_by_user(username):
         rows = trails_mod.trails_by_user(g, username)
         return jsonify(rows)
     return _inner(username)
+
+@app.route("/api/trails/<int:trail_id>", methods=["GET"])
+def api_trail_detail(trail_id):
+    @with_conn
+    def _inner(g, trail_id):
+        cursor = g.conn.cursor()
+        query = """
+            SELECT t.trail_id, t.name AS trail_name, u.name AS user_name,
+                   r.name AS restaurant_name, d.name AS dish_name, m.price, r.location
+            FROM trail t
+            JOIN users u ON t.user_id = u.user_id
+            JOIN menu m ON t.dish_id = m.dish_id AND t.restaurant_id = m.restaurant_id
+            JOIN dish d ON m.dish_id = d.dish_id
+            JOIN restaurant r ON m.restaurant_id = r.restaurant_id
+            WHERE t.trail_id = %s
+        """
+        cursor.execute(query, (trail_id,))
+        rows = rows_to_dicts(cursor)
+        cursor.close()
+        return jsonify(rows)
+    return _inner(trail_id)
+
+def rows_to_dicts(cursor):
+    cols = [desc[0] for desc in cursor.description]
+    return [dict(zip(cols, row)) for row in cursor.fetchall()]
 
 @app.route("/api/trails/name/<name>", methods=["GET"])
 def api_trails_by_name(name):
