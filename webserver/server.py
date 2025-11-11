@@ -1,28 +1,23 @@
-"""
-Merged server.py using existing helper modules (dish.py, menu.py, restaurant.py, reviews.py, trails.py, users.py).
-- No ORMs. Uses psycopg2 connection pool and passes a small `g` object with `.conn` to helper functions.
-- Does NOT seed/populate the DB.
-- Serves frontend from ../frontend/dist or ../frontend/build.
-- Runs on port 8111 by default.
-"""
-
 import os
 from pathlib import Path
-from flask import Flask, jsonify, request, send_from_directory, abort
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 import logging
 import psycopg2
 from psycopg2 import pool
 import traceback
-import logging
 
-# Import existing helper modules (assumed to be in same folder)
+# Import helper modules
 import dish, menu as menu_mod, restaurant as restaurant_mod, reviews as reviews_mod, trails as trails_mod, users as users_mod
 
 # --- Configuration ---
 BASE_DIR = Path(__file__).resolve().parent
 WEBROOT = BASE_DIR.parent
-DEFAULT_DB_URI = os.environ.get("DATABASEURI") or os.environ.get("DATABASE_URL") or "postgresql://tb3201:sriya@127.0.0.1:5432/proj1part2"
+DEFAULT_DB_URI = (
+    os.environ.get("DATABASEURI")
+    or os.environ.get("DATABASE_URL")
+    or "postgresql://tb3201:sriya@127.0.0.1:5432/proj1part2"
+)
 
 DB_MIN_CONN = int(os.environ.get("DB_MIN_CONN", 1))
 DB_MAX_CONN = int(os.environ.get("DB_MAX_CONN", 100))
@@ -32,22 +27,20 @@ logger = logging.getLogger("server")
 
 # --- Connection pool ---
 try:
-    # psycopg2 expects a DSN; accept either URL or components
-    dsn = DEFAULT_DB_URI
-    connection_pool = psycopg2.pool.SimpleConnectionPool(DB_MIN_CONN, DB_MAX_CONN, dsn)
+    connection_pool = psycopg2.pool.SimpleConnectionPool(DB_MIN_CONN, DB_MAX_CONN, DEFAULT_DB_URI)
     if connection_pool:
-        logger.info("Initialized psycopg2 connection pool (min=%d max=%d)", DB_MIN_CONN, DB_MAX_CONN)
+        logger.info("✅ Initialized psycopg2 connection pool (min=%d max=%d)", DB_MIN_CONN, DB_MAX_CONN)
 except Exception:
-    logger.exception("Failed to initialize connection pool with DSN: %s", DEFAULT_DB_URI)
+    logger.exception("❌ Failed to initialize connection pool with DSN: %s", DEFAULT_DB_URI)
     connection_pool = None
 
-# Helper to get a temporary g-like object that helper modules expect (they use g.conn.cursor())
+# --- Helper g-like wrapper ---
 class G:
     def __init__(self, conn):
         self.conn = conn
 
 def with_conn(fn):
-    """Decorator to provide a connection wrapper `g` to the wrapped function."""
+    """Decorator to provide DB connection as `g`."""
     def wrapper(*args, **kwargs):
         if connection_pool is None:
             return jsonify(error="DB pool not initialized"), 500
@@ -56,18 +49,16 @@ def with_conn(fn):
             conn = connection_pool.getconn()
             g = G(conn)
             result = fn(g, *args, **kwargs)
-            # If the helper returned rows (list/dict), ensure to commit if they changed DB? Helpers mostly read.
             return result
         except Exception as e:
             logger.exception("Error in DB operation: %s", e)
-            # If the helper returned a Flask response, we don't want to double-wrap; assume exceptions mean 500
             return jsonify(error=str(e), traceback=traceback.format_exc()), 500
         finally:
             if conn:
                 try:
                     connection_pool.putconn(conn)
                 except Exception:
-                    logger.exception("Failed to putconn")
+                    logger.exception("Failed to return connection to pool")
     wrapper.__name__ = fn.__name__
     return wrapper
 
@@ -75,13 +66,13 @@ def with_conn(fn):
 app = Flask(__name__, static_folder=None)
 CORS(app)
 
-# Simple health check
+# --- Health check ---
 @app.route("/api/health", methods=["GET"])
 def health():
     ok = connection_pool is not None
     return jsonify(status="ok" if ok else "error", db_pool=bool(connection_pool))
 
-# Users
+# --- Users ---
 @app.route("/api/users", methods=["GET"])
 def api_get_users():
     @with_conn
@@ -90,12 +81,22 @@ def api_get_users():
         return jsonify(rows)
     return _inner()
 
-# Restaurants
+# --- Restaurants ---
 @app.route("/api/restaurants", methods=["GET"])
 def api_restaurants():
+    name = request.args.get("name", "").strip()
+    location = request.args.get("location", "").strip()
+    cuisine = request.args.get("cuisine", "").strip()
+    min_rating = request.args.get("minRating", "").strip()
+
     @with_conn
     def _inner(g):
-        rows = restaurant_mod.get_all_restaurants(g)
+        if name:
+            rows = restaurant_mod.get_restaurant_by_name(g, name)
+        elif location or cuisine or min_rating:
+            rows = restaurant_mod.get_all_restaurants(g)  # fallback until filtering supported
+        else:
+            rows = restaurant_mod.get_all_restaurants(g)
         return jsonify(rows)
     return _inner()
 
@@ -109,29 +110,44 @@ def api_restaurant_by_name(name):
         return jsonify(row)
     return _inner(name)
 
-# Dishes / Menu
-@app.route("/api/dishes", methods=["GET"])
+# --- Dishes ---
+@app.route("/api/dishes")
 def api_dishes():
-    # support query param 'name' to search dishes by substring (uses helper get_dish_by_name which expects exact maybe)
-    name = request.args.get("name")
-    price = request.args.get("price", type=float)
-    tag = request.args.get("tag")
-    @with_conn
-    def _inner(g):
-        if name:
-            rows = dish.get_dish_by_name(g, name)
-            return jsonify(rows)
-        if price is not None:
-            rows = dish.get_dish_by_price(g, price)
-            return jsonify(rows)
-        if tag:
-            rows = dish.get_dish_by_tag(g, tag)
-            return jsonify(rows)
-        # fallback: return all restaurants' menus via restaurant helper
-        rows = restaurant_mod.get_all_restaurants(g)
-        return jsonify(rows)
-    return _inner()
+    name = request.args.get("name", "")
+    tag = request.args.get("tag", "")
+    max_price = request.args.get("price", "")
 
+    # Fetch dishes with optional filters
+    try:
+        if name or tag or max_price:
+            rows = menu_mod.filter_menu_items(g, name=name, tag=tag, max_price=max_price)
+        else:
+            # fallback: get everything from menu
+            if hasattr(menu_mod, "get_all_menu"):
+                rows = menu_mod.get_all_menu(g)
+            else:
+                rows = []
+    except Exception as e:
+        logger.exception("Error fetching dishes")
+        return jsonify({"error": str(e)}), 500
+
+    # Format output for frontend
+    dishes = [
+        {
+            "dish_id": row.get("menu_id") or row.get("dish_id"),
+            "name": row.get("name"),
+            "restaurant_id": row.get("restaurant_id"),
+            "restaurant_name": row.get("restaurant_name"),
+            "price": row.get("price"),
+            "dietary_tags": row.get("dietary_tags"),
+        }
+        for row in rows
+    ]
+
+    return jsonify(dishes)
+
+
+# --- Menu / Budget ---
 @app.route("/api/menu/price", methods=["GET"])
 def api_menu_by_price():
     max_price = request.args.get("max_price", type=float)
@@ -143,7 +159,6 @@ def api_menu_by_price():
         return jsonify(rows)
     return _inner(max_price)
 
-# Budget endpoint (compatibility)
 @app.route("/api/budget", methods=["GET"])
 def api_budget():
     max_price = request.args.get("max_price", type=float)
@@ -155,7 +170,7 @@ def api_budget():
         return jsonify(rows)
     return _inner(max_price)
 
-# Reviews
+# --- Reviews ---
 @app.route("/api/reviews", methods=["GET"])
 def api_get_reviews():
     @with_conn
@@ -163,6 +178,18 @@ def api_get_reviews():
         rows = reviews_mod.all_reviews(g)
         return jsonify(rows)
     return _inner()
+
+# ✅ Added route for React's query-param style access:
+@app.route("/api/reviews/user", methods=["GET"])
+def api_reviews_user_query():
+    username = request.args.get("user")
+    if not username:
+        return jsonify(error="username required"), 400
+    @with_conn
+    def _inner(g, username):
+        rows = reviews_mod.reviews_by_user(g, username)
+        return jsonify(rows)
+    return _inner(username)
 
 @app.route("/api/reviews/user/<username>", methods=["GET"])
 def api_reviews_by_user(username):
@@ -180,7 +207,7 @@ def api_count_reviews(username):
         return jsonify(count=c)
     return _inner(username)
 
-# Trails
+# --- Trails ---
 @app.route("/api/trails", methods=["GET"])
 def api_get_trails():
     @with_conn
@@ -205,7 +232,7 @@ def api_trails_by_name(name):
         return jsonify(rows)
     return _inner(name)
 
-# Profile endpoint (from api.py compatibility)
+# --- Profile ---
 @app.route("/api/profile", methods=["GET"])
 def api_profile():
     username = request.args.get("username")
@@ -213,15 +240,18 @@ def api_profile():
         return jsonify(error="username required"), 400
     @with_conn
     def _inner(g, username):
-        # reuse existing helpers to assemble profile: user reviews + trails
         user_reviews = reviews_mod.reviews_by_user(g, username)
         user_trails = trails_mod.trails_by_user(g, username)
         return jsonify({"username": username, "reviews": user_reviews, "trails": user_trails})
     return _inner(username)
 
-# Static frontend serving
+# --- Static Frontend Serving ---
 def find_frontend_dist():
-    candidates = [WEBROOT / "frontend" / "dist", WEBROOT / "frontend" / "build", WEBROOT / "frontend" / "dist" / "client"]
+    candidates = [
+        WEBROOT / "frontend" / "dist",
+        WEBROOT / "frontend" / "build",
+        WEBROOT / "frontend" / "dist" / "client"
+    ]
     for c in candidates:
         if c.exists():
             return c
@@ -246,8 +276,9 @@ def serve_frontend(path):
         return send_from_directory(str(WEBROOT / "frontend"), "index.html")
     return jsonify(ok=True, msg="API running. Build the React frontend into frontend/dist to serve static files.")
 
-# Main
+# --- Main ---
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8111))
-    logger.info("Starting server on port %d", port)
+    logger.info("🚀 Starting server on port %d", port)
     app.run(host="0.0.0.0", port=port)
+
