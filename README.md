@@ -4,12 +4,12 @@ SQL front-end code to access DB located in Postgres server in private Google Clo
 Run this to download modules:
 pip install -r requirements.txt
 
-## PostgreSQL username and password:
-Located in the VM instance under tb3201. Steps to login:
-1. #### psql -U tb3201 -h localhost -d proj1part2
-2. #### Password: sriya
+## Demo:
+https://www.loom.com/share/4ed548cb308f45f0bb03dfe17d8a17e8
 
-## Web Application URL:
+We shall be switching off the backend server as we are almost out of credits unfortunately. The above link points to a recording of the project.
+
+## Web Application URL (will not work since backend is off):
 http://34.148.46.88:8111
 
 ## Part 1 features implemented
