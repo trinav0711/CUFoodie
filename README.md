@@ -1,8 +1,6 @@
 # CUFoodie
-SQL front-end code to access DB located in Postgres server in private Google Cloud VM
+Check restaurants, dishes, reviews and food trails near Columbia University, New York. This is a full-stack project involving a React frontend, Flask service layer and PostgreSQL backend. The backend server, running in a Google Cloud VM, is pre-populated with realistic data.
 
-Run this to download modules:
-pip install -r requirements.txt
 
 ## Demo:
 https://www.loom.com/share/4ed548cb308f45f0bb03dfe17d8a17e8
