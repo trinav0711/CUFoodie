@@ -1,9 +1,10 @@
 # CUFoodie
 Check restaurants, dishes, reviews and food trails near Columbia University, New York. This is a full-stack project involving a React frontend, Flask service layer and PostgreSQL backend. The backend server, running in a Google Cloud VM, is pre-populated with realistic data.
 
-
-## Demo:
-https://www.loom.com/share/4ed548cb308f45f0bb03dfe17d8a17e8
+## PostgreSQL username and password:
+Located in the VM instance under tb3201. Steps to login:
+1. #### psql -U tb3201 -h localhost -d proj1part2
+2. #### Password: sriya
 
 We shall be switching off the backend server as we are almost out of credits unfortunately. The above link points to a recording of the project.
 
