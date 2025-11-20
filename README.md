@@ -96,3 +96,46 @@ The page will change dynamically as the user changes the filters. Initially, it 
 
 ### Food Trails Explorer
 The page about food trails contains interesting details about different kinds of food trips, such as midnight snacks, etc. The output is a list containing the restaurant details, dish and its price. This operation also uses multiple joins on the server-side, combining details from the menu, dish, restaurant, and trail tables based on the trail name selected. The part about trails is a unique aspect of this project, as it gives users the ability to find curated lists based on the inputs of previous users.
+
+## Part 4 expansion
+We expanded the schema by adding:
+1. TEXT column: Added a new column called "ingredients" to the dish table of type text to do full-text search. Post that, we added an index for this new column to make searches more efficient.
+2. COMPOSITE attribute: Created a new composite type called "address" which contains street, city and zip_code. Therefater, created and populated a new table called customer which contains first_name, last_name, budget (how much are they willing to spend) and address (composite type).
+
+### Meaningful Queries
+#### TEXT column
+We have the following two queries which fetch data by filtering out information from the ingredients column:
+
+1. Get all dishes which have garlic as one of its components during cooking:
+```
+SELECT dish_id, name, ingredients
+FROM dish
+WHERE to_tsvector('english', ingredients) @@ plainto_tsquery('garlic');
+```
+2. Get dishes consisting of tomato and cheese:
+```
+SELECT dish_id, name
+FROM dish
+WHERE to_tsvector('english', ingredients) @@ to_tsquery('tomato & cheese');
+```
+
+#### Composite Attribute
+We have create a couple of queries which output or utitlize data from the new composite attribute address:
+
+1. Get customer details based on their budgets in decreasing order, i.e., richest customer first:
+```
+SELECT 
+    first_name,
+    last_name,
+    budget,
+    address
+FROM customer
+ORDER BY budget DESC;
+```
+
+2. Find all customers living under the pincode '10027':
+```
+proj1part2=> SELECT *
+FROM customer   
+WHERE (address).zip_code = '10027';
+```
