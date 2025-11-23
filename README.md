@@ -101,6 +101,7 @@ The page about food trails contains interesting details about different kinds of
 We expanded the schema by adding:
 1. TEXT column: Added a new column called "ingredients" to the dish table of type text to do full-text search. Post that, we added an index for this new column to make searches more efficient.
 2. COMPOSITE attribute: Created a new composite type called "address" which contains street, city and zip_code. Therefater, created and populated a new table called customer which contains first_name, last_name, budget (how much are they willing to spend) and address (composite type).
+3. ARRAY attribute: Converted "dietary_tags" on the dish table into a proper PostgreSQL array type TEXT[] "dietary_tags_array" and populated it from existing comma-separated values. This lets us query, index, and manipulate multi-valued dietary tags (e.g., vegan, gluten-free, spicy) efficiently and unambiguously.
 
 ### Meaningful Queries
 #### TEXT column
@@ -138,4 +139,26 @@ ORDER BY budget DESC;
 proj1part2=> SELECT *
 FROM customer   
 WHERE (address).zip_code = '10027';
+```
+#### Array Attribute
+The following two queries demonstrate the use of the array attribute effectively on the dish table:
+
+1. Find all dishes that contain BOTH 'vegetarian' and 'gluten-free' in their dietary tags:
+```
+SELECT 
+    dish_id, 
+    name, 
+    dietary_tags_array
+FROM dish
+WHERE dietary_tags_array @> ARRAY['vegetarian', 'gluten-free'];
+```
+
+2. Find all dishes where the first dietary tag is 'vegetarian':
+```
+SELECT 
+    dish_id, 
+    name, 
+    dietary_tags_array
+FROM dish
+WHERE dietary_tags_array[1] = 'vegetarian';
 ```
