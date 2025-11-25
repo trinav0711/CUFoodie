@@ -98,14 +98,34 @@ The page will change dynamically as the user changes the filters. Initially, it 
 The page about food trails contains interesting details about different kinds of food trips, such as midnight snacks, etc. The output is a list containing the restaurant details, dish and its price. This operation also uses multiple joins on the server-side, combining details from the menu, dish, restaurant, and trail tables based on the trail name selected. The part about trails is a unique aspect of this project, as it gives users the ability to find curated lists based on the inputs of previous users.
 
 ## Part 4 expansion
+
+For Part 4, we extended the final Part 1 schema with three complementary PostgreSQL features: a TEXT column with full-text search, a composite type, and an array attribute. Each addition was chosen to address a specific application need (searchability, structured customer data, and multi-valued tags) while demonstrating advanced PostgreSQL functionality.
 We expanded the schema by adding:
-1. TEXT column: Added a new column called "ingredients" to the dish table of type text to do full-text search. Post that, we added an index for this new column to make searches more efficient.
-2. COMPOSITE attribute: Created a new composite type called "address" which contains street, city and zip_code. Therefater, created and populated a new table called customer which contains first_name, last_name, budget (how much are they willing to spend) and address (composite type).
-3. ARRAY attribute: Converted "dietary_tags" on the dish table into a proper PostgreSQL array type TEXT[] "dietary_tags_array" and populated it from existing comma-separated values. This lets us query, index, and manipulate multi-valued dietary tags (e.g., vegan, gluten-free, spicy) efficiently and unambiguously.
+
+### 1. TEXT column: ``` ingredients ``` (full-text search)
+Added a new column called "ingredients" to the dish table of type text to do full-text search. Post that, we added an index for this new column to make searches more efficient.
+
+Rationale: Ingredients are document-style text (lists or short paragraphs). Users commonly search by ingredients (e.g., “garlic”, “no nuts”, “tomato & cheese”). Full-text search provides linguistically aware matching (tokenization, stemming, boolean queries) and avoids brittle LIKE patterns.
+
+How it fits the app: Enables a global or dish-level “search by ingredient” feature useful for allergy checks, ingredient-driven discovery, and richer recommendations. The GIN index keeps searches interactive even at scale.
+
+### 2. COMPOSITE attribute: ```address``` type + ```customer``` table
+Created a new composite type called "address" that contains street, city, and zip_code. Thereafter, created and populated a new table called customer which contains first_name, last_name, budget (how much are they willing to spend) and address (composite type).
+
+Rationale: Street/city/zip are logically grouped and often used together. A composite type keeps related fields compactly typed and allows passing an address as a unit while retaining the ability to reference subfields. This demonstrates the use of CREATE TYPE and maintains a schema that is expressive without over-normalization.
+
+How it fits the app: Customer location and budget support personalized and localized features: recommending trails/dishes within a user’s neighborhood and budget, aggregating customers by zip for analytics, and enabling admin views.
+
+### 3. ARRAY attribute: ```dietary_tags_array``` (TEXT[])
+Converted "dietary_tags" on the dish table into a proper PostgreSQL array type TEXT[] "dietary_tags_array" and populated it from existing comma-separated values. This lets us query, index, and manipulate multi-valued dietary tags (e.g., vegan, gluten-free, meat) efficiently and unambiguously.
+
+Rationale: Dietary tags are inherently multi-valued (e.g., vegan, gluten-free, meat). Arrays model this directly, avoiding brittle parsing and false matches common with comma-separated strings. PostgreSQL array operators (ANY, @>, &&) and GIN indexing enable precise and fast tag queries.
+
+How it fits the app: Drives the Dish Explorer and filter UI with multi-select dietary filters, AND/OR tag searches, and backend tag recommendations. Also improves the correctness and performance of tag lookups used for personalization.
 
 ### Meaningful Queries
 #### TEXT column
-We have the following two queries which fetch data by filtering out information from the ingredients column:
+We have the following queries which fetch data by filtering out information from the ingredients column:
 
 1. Get all dishes which have garlic as one of its components during cooking:
 ```
@@ -118,6 +138,12 @@ WHERE to_tsvector('english', ingredients) @@ plainto_tsquery('garlic');
 SELECT dish_id, name
 FROM dish
 WHERE to_tsvector('english', ingredients) @@ to_tsquery('tomato & cheese');
+```
+3. Get dishes that have no eggs:
+```
+SELECT dish_id, name, ingredients
+FROM dish
+WHERE to_tsvector('english', ingredients) @@ to_tsquery('!eggs');
 ```
 
 #### Composite Attribute
@@ -140,8 +166,23 @@ proj1part2=> SELECT *
 FROM customer   
 WHERE (address).zip_code = '10027';
 ```
+
+3. Find all customers having budget greater than '$150'
+```
+SELECT 
+    first_name,
+    last_name,
+    budget,
+    (address).street,
+    (address).city,
+    (address).zip_code
+FROM customer
+WHERE budget > 150
+ORDER BY (address).zip_code, budget DESC;
+```
+
 #### Array Attribute
-The following two queries demonstrate the use of the array attribute effectively on the dish table:
+The following queries demonstrate the use of the array attribute effectively on the dish table:
 
 1. Find all dishes that contain BOTH 'vegetarian' and 'gluten-free' in their dietary tags:
 ```
@@ -161,4 +202,16 @@ SELECT
     dietary_tags_array
 FROM dish
 WHERE dietary_tags_array[1] = 'vegetarian';
+```
+
+3. Find all meat-based dishes
+```
+SELECT 
+    dish_id, 
+    name, 
+    dietary_tags_array
+FROM dish
+WHERE dietary_tags_array @> ARRAY['meat']
+    AND NOT (dietary_tags_array @> ARRAY['vegetarian'])
+ORDER BY dish_id;
 ```
